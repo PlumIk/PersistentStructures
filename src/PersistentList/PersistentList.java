@@ -589,7 +589,7 @@ public class PersistentList<T> implements List {
      * @return          Массив.
      */
     public PersistentMassive<T> getArray(int version){
-        return  new PersistentMassive<T>( heads.floorEntry(version).getValue(), version);
+        return  null;
     }
 
     /**

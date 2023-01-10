@@ -3,22 +3,27 @@ import PersistentMassive.PersistentMassive;
 
 public class Main {
 
-
-    public static void main(String[] args) {
-        PersistentList<Integer> a = new PersistentList<Integer>();
-        a.add(2);
-        for(int i=0;i<8;i++){
-            a.add(i+1);
-        }
-        a.add(3,13);
-
-        for(Object o: a){
-            System.out.println("In value:"+o);
+    private static void printMas(PersistentMassive massive){
+        for(int i=0;i< massive.size();i++){
+            System.out.println("In "+i+ " value "+ massive.get(i));
         }
         System.out.println();
-        var b= a.getArray();
-        for(int i=0;i<b.size();i++){
-            System.out.println("value:"+b.get(i));
-        }
+    }
+
+    public static void main(String[] args) {
+        PersistentMassive<Integer> a = new PersistentMassive<Integer>();
+        a = a.set(0,1);
+        a=a.add(2);
+        a=a.add(3);
+        printMas(a);
+        var b = a.Undo();
+        printMas(b);
+        b=b.Undo();
+        printMas(b);
+        printMas(b.Undo());
+        printMas(b.Redo());
+        var c = b.add(15);
+        printMas(c);
+        printMas(b.Redo());
     }
 }
