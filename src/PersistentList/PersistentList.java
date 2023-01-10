@@ -3,25 +3,22 @@ import PersistentMassive.PersistentMassive;
 import Utils.Exceptions;
 
 import java.util.*;
-import java.util.function.UnaryOperator;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
-public class PersistentList<T> implements List {
-    private int currentVersion = 0;
-    private TreeMap<Integer, Integer> lengths;
-    private TreeMap<Integer, ListNode<T>> heads;
-    private TreeMap<Integer, ListNode<T>> tails;
+public class PersistentList<T> {
+    private final int length;
+    private  ListNode<T> head;
+    private ListNode<T> tail;
+    private Stack <PersistentList<T>> prev = new Stack<>();
+    private Stack <PersistentList <T>> next =  new Stack<>();
 
     /**
      * Конструктор класса. Создаёт пустой лист.
      */
     public PersistentList() {
-        heads = new TreeMap<>();
-        tails = new TreeMap<>();
-        lengths = new TreeMap<>();
-        lengths.put(0, 0);
+        length = 0;
     }
 
     /**
@@ -30,35 +27,27 @@ public class PersistentList<T> implements List {
      * @param c Коллекция.
      */
     public PersistentList(Collection<T> c) {
-        heads = new TreeMap<>();
-        tails = new TreeMap<>();
-        lengths = new TreeMap<>();
-        lengths.put(0, c.size());
-
+        length = c.size();
+        ListNode<T> node = null;
         for (T value : c) {
-            add(value);
-            currentVersion--;
+            ListNode<T> subNode= new ListNode<T>(value, node,null);
+            if(node!=null){
+                node.setNext(subNode);
+            }
+            node=subNode;
+            if(head == null){
+                head = node;
+            }
+            tail=node;
         }
-        currentVersion++;
     }
 
-    /**
-     * Возвращает текущую версию листа.
-     */
-    public int getVersion(){
-        return currentVersion;
-    }
-
-    /**
-     * Возвращает длину листа в выбранной версии.
-     *
-     * @param version   Версия.
-     * @return          Длина листа.
-     */
-    public int size(int version) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-        return lengths.floorEntry(version).getValue();
+    private PersistentList(Stack <PersistentList <T>> prevs, Stack <PersistentList <T>> nexts, ListNode<T> head, ListNode<T> tail, int size){
+        this.head = head;
+        this.tail = tail;
+        length = size;
+        this.prev=prevs;
+        this.next=nexts;
     }
 
     /**
@@ -66,21 +55,8 @@ public class PersistentList<T> implements List {
      *
      * @return Длина листа.
      */
-    @Override
     public int size() {
-        return size(currentVersion);
-    }
-
-    /**
-     * Возвращает, пустой ли лист в выбранной версии.
-     *
-     * @param version   Версия.
-     * @return          Пустой ли лист.
-     */
-    public boolean isEmpty(int version) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-        return size(version) == 0;
+        return length;
     }
 
     /**
@@ -88,46 +64,28 @@ public class PersistentList<T> implements List {
      *
      * @return Пустой ли лист.
      */
-    @Override
     public boolean isEmpty() {
-        return isEmpty(currentVersion);
+        return length ==0;
     }
 
     /**
      * Возвращает, содержит ли лист выбранной версии значение.
      *
      * @param o         Значение.
-     * @param version   Версия.
      * @return          true, если содержит. Иначе false.
      */
-    public boolean contains(Object o, int version) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-        if (isEmpty(version))
-            return false;
-
-        ListNode<T> current = heads.floorEntry(version).getValue();
-        for (int i = 0; i < size(version); i++) {
-            if (current.getValue(version) == null) {
+    public boolean contains(Object o) {
+        ListNode<T> current = head;
+        for (int i = 0; i < length; i++) {
+            if (current.getData() == null) {
                 if (o == null) return true;
             } else {
-                if (current.getValue(version).equals(o))
+                if (current.getData().equals(o))
                     return true;
             }
-            current = current.getNext(version);
+            current = current.getNext();
         }
         return false;
-    }
-
-    /**
-     * Возвращает, содержит ли лист выбранной версии значение.
-     *
-     * @param o         Значение.
-     * @return          true, если содержит. Иначе false.
-     */
-    @Override
-    public boolean contains(Object o) {
-        return contains(o, currentVersion);
     }
 
     /**
@@ -136,55 +94,67 @@ public class PersistentList<T> implements List {
      * @param o     Значение.
      * @return      true, если значение было добавлено. Иначе false.
      */
-    @Override
-    public boolean add(Object o) {
-        currentVersion++;
-        if (heads.size() == 0 || heads.floorEntry(currentVersion).getValue() == null) {
-            ListNode<T> current = new ListNode<>((T) o, currentVersion, null, null);
-            heads.put(currentVersion, current);
-            tails.put(currentVersion, current);
-            lengths.put(currentVersion, 1);
-        } else {
-            ListNode<T> prev = tails.floorEntry(currentVersion).getValue();
-            ListNode<T> current = new ListNode<T>((T) o, currentVersion, prev, null);
-            prev.setNext(currentVersion, current);
-
-            tails.put(currentVersion, current);
-            lengths.put(currentVersion, size(currentVersion) + 1);
+    public PersistentList<T> add(T o) {
+        if(head==null){
+            ListNode<T> current = new ListNode<T>(o,null, null);
+            Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+            prev.push(this);
+            Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+            return new PersistentList<T>(prev, next,current, current, 1);
         }
-        return true;
+        ListNode<T> current = head;
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        for (int i = 0; i < length; i++) {
+            ListNode<T> subCurrent = new ListNode<T>(current.getData(), subTail, null);
+            if(subTail!=null){
+                subTail.setNext(subCurrent);
+            }
+            if(subHead==null){
+                subHead = subCurrent;
+            }
+            subTail=subCurrent;
+            current = current.getNext();
+        }
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+        prev.push(this);
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+        return new PersistentList<T>(prev, next,subHead, subTail, length +1);
     }
 
     /**
-     * Удаляет значение с конеца листа.
+     * Удаляет значение из листа.
      *
      * @param o     Значение.
      * @return      true, если значение было удалено. Иначе false.
      */
-    @Override
-    public boolean remove(Object o) {
-        currentVersion++;
-        ListNode<T> current = heads.floorEntry(currentVersion).getValue();
-        for (int i = 0; i < size(currentVersion); i++) {
-            if (current.getValue(currentVersion).equals(o)) {
-                ListNode<T> prevEl = current.getPrev(currentVersion);
-                ListNode<T> nextEl = current.getNext(currentVersion);
-                if (prevEl != null) {
-                    prevEl.setNext(currentVersion, nextEl);
-                } else {
-                    heads.put(currentVersion, nextEl);
-                }
-                if (nextEl != null) {
-                    nextEl.setPrev(currentVersion, prevEl);
-                } else {
-                    tails.put(currentVersion, prevEl);
-                }
-                lengths.put(currentVersion, size(currentVersion) - 1);
-                return true;
-            }
-            current = current.getNext(currentVersion);
+    public PersistentList<T> remove(Object o) {
+        if (!contains(o)){
+            return this;
         }
-        return false;
+        ListNode<T> current = head;
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        int subAdd=0;
+        for (int i = 0; i < length; i++) {
+            if(!current.getData().equals(o)) {
+                ListNode<T> subCurrent = new ListNode<T>(current.getData(), subTail, null);
+                if (subTail != null) {
+                    subTail.setNext(subCurrent);
+                }
+                if (subHead == null) {
+                    subHead = subCurrent;
+                }
+                subTail = subCurrent;
+            }else{
+                subAdd--;
+            }
+            current = current.getNext();
+        }
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+        prev.push(this);
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+        return new PersistentList<T>(prev, next,subHead, subTail, length +subAdd);
     }
 
     /**
@@ -192,96 +162,67 @@ public class PersistentList<T> implements List {
      *
      * @param index     Индекс, с которого начинается добавление.
      * @param c         Коллекция.
-     * @return          true, если элементы были добавлены. Иначе false.
+     * @return          Новый лист.
      */
-    @Override
-    public boolean addAll(int index, Collection c) {
-        if (index < 0 || index > size())
-            throw new IndexOutOfBoundsException(Exceptions.LIST_INDEX_OUT_OF_BOUNDS);
-        if (c.isEmpty())
-            return false;
-        currentVersion++;
+    public PersistentList<T> addAll(int index, Collection<T> c) {
+        ListNode<T> current = head;
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        int addLen=0;
+        for (int i = 0; i < length; i++) {
 
-        ListNode<T> current = null;
-        ListNode<T> prev = null;
-        if (!(heads.size() == 0 || heads.floorEntry(currentVersion).getValue() == null)) {
-            current = heads.floorEntry(currentVersion).getValue();
-
-            if (index == size()) {
-                prev = tails.floorEntry(currentVersion).getValue();
-                current = null;
-            } else {
-                for (int i = 0; i < index; i++) {
-                    current = current.getNext(currentVersion);
+            if(i==index){
+                for (T value : c) {
+                    ListNode<T> subCurrent= new ListNode<T>(value, subTail,null);
+                    if(subTail!=null){
+                        subTail.setNext(subCurrent);
+                    }
+                    if(subHead==null){
+                        subHead = subCurrent;
+                    }
+                    subTail=subCurrent;
+                    addLen++;
                 }
+            }
 
-                prev = current.getPrev(currentVersion);
+            ListNode<T> subCurrent = new ListNode<T>(current.getData(), subTail, null);
+            if(subTail!=null){
+                subTail.setNext(subCurrent);
             }
-        }
-        ListNode<T> newEl = null;
-        for (Object o : c) {
-            newEl = new ListNode<T>((T)o, currentVersion, prev, current);
-            if (null != prev) {
-                prev.setNext(currentVersion, newEl);
-            } else {
-                heads.put(currentVersion, newEl);
+            if(subHead==null){
+                subHead = subCurrent;
             }
-            if (null != current) {
-                current.setPrev(currentVersion, newEl);
-            } else {
-                tails.put(currentVersion, newEl);
-            }
-            prev = newEl;
+            subTail=subCurrent;
+            current = current.getNext();
         }
 
-        lengths.put(currentVersion, size(currentVersion) + c.size());
-        return true;
+        if(length ==index){
+            for (T value : c) {
+                ListNode<T> subCurrent= new ListNode<T>(value, subTail,null);
+                if(subTail!=null){
+                    subTail.setNext(subCurrent);
+                }
+                if(subHead==null){
+                    subHead = subCurrent;
+                }
+                subTail=subCurrent;
+                addLen++;
+            }
+        }
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+        prev.push(this);
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+        return new PersistentList<T>(prev, next,subHead, subTail, length +addLen);
     }
 
     /**
      * Добавляет коллекцию в конец листа.
      *
      * @param c     Коллекция.
-     * @return      true, если элементы были добавлены. Иначе false.
+     * @return      Новый лист.
      */
-    @Override
-    public boolean addAll(Collection c) {
-        return addAll(size(), c);
-    }
-
-    /**
-     * Удаляет все эелементы из коллекции, содержащиеся в листе.
-     *
-     * @param c     Коллекция.
-     * @return      true, если было удалено хоть одно значение, иначе false.
-     */
-    @Override
-    public boolean removeAll(Collection c) {
-        boolean isChanged = false;
-        for (Object o : c) {
-            while (remove(o)) {
-                isChanged = true;
-                currentVersion--;
-            }
-        }
-        return isChanged;
-    }
-
-    /**
-     * Возвращает, содержит ли лист определённой версии все значения из коллекции.
-     *
-     * @param c         Коллекция.
-     * @param version   Версия.
-     * @return          true, если содержит. Иначе False.
-     */
-    public boolean containsAll(Collection c, int version) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-        for (Object o : c) {
-            if (!contains(o, version))
-                return false;
-        }
-        return true;
+    public PersistentList<T> addAll(Collection<T> c) {
+        return addAll(length, c);
     }
 
     /**
@@ -290,31 +231,57 @@ public class PersistentList<T> implements List {
      * @param c         Коллекция.
      * @return          true, если содержит. Иначе False.
      */
-    @Override
-    public boolean containsAll(Collection c) {
-        return containsAll(c, currentVersion);
+    public boolean containsAll(Collection<T> c) {
+        for (Object o : c) {
+            if (!contains(o))
+                return false;
+        }
+        return true;
     }
 
     /**
-     * Возвращает значение по индексу для выбранной версии.
+     * Удаляет все эелементы из коллекции, содержащиеся в листе.
      *
-     * @param index     Индекс.
-     * @param version   Версия.
-     * @return          Значение.
+     * @param c     Коллекция.
+     * @return      true, если было удалено хоть одно значение, иначе false.
      */
-    public Object get(int index, int version) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-        if (index < 0 || index >= size())
-            throw new IndexOutOfBoundsException(Exceptions.LIST_INDEX_OUT_OF_BOUNDS);
-
-        ListNode<T> current = heads.floorEntry(version).getValue();
-        for (int i = 0; i < size(); i++) {
-            if (i == index)
-                return current.getValue(version);
-            current = current.getNext(version);
+    public PersistentList<T> removeAll(Collection<T> c) {
+        boolean containAny=false;
+        for (Object o : c) {
+            if (contains(o))
+                containAny = true;
         }
-        return null;
+        if(!containAny){
+            return this;
+        }
+        ListNode<T> current = head;
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        int subAdd=0;
+        for (int i = 0; i < length; i++) {
+            boolean remove = false;
+            for (Object o : c) {
+                remove = remove||current.getData().equals(o);
+            }
+
+            if(remove){
+                subAdd--;
+            }else{
+                ListNode<T> subCurrent = new ListNode<T>(current.getData(), subTail, null);
+                if (subTail != null) {
+                    subTail.setNext(subCurrent);
+                }
+                if (subHead == null) {
+                    subHead = subCurrent;
+                }
+                subTail = subCurrent;
+            }
+            current = current.getNext();
+        }
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+        prev.push(this);
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+        return new PersistentList<T>(prev, next,subHead, subTail, length +subAdd);
     }
 
     /**
@@ -323,9 +290,21 @@ public class PersistentList<T> implements List {
      * @param index     Индекс.
      * @return          Значение.
      */
-    @Override
     public Object get(int index) {
-        return get(index, currentVersion);
+        if(index<0||index>= length){
+            return Exceptions.LIST_INDEX_OUT_OF_BOUNDS;
+        }
+        else if(index==0){
+            return head.getData();
+        } else if (index== length -1) {
+            return tail.getData();
+        }else {
+            ListNode<T> current = head;
+            for(int i=0;i<index;i++){
+                current=head.getNext();
+            }
+            return current.getData();
+        }
     }
 
     /**
@@ -335,17 +314,31 @@ public class PersistentList<T> implements List {
      * @param element   Новое значение.
      * @return          Предыдущее значение.
      */
-    @Override
-    public Object set(int index, Object element) {
-        currentVersion++;
-        ListNode<T> current = heads.floorEntry(currentVersion).getValue();
-        for (int i = 0; i < index; i++) {
-            current = current.getNext(currentVersion);
-        }
-        Object prevObj = current.getValue(currentVersion);
-        current.setValue(currentVersion, (T) element);
+    public PersistentList<T>  set(int index, T element) {
+        ListNode<T> current = head;
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        for (int i = 0; i < length; i++) {
+            ListNode<T> subCurrent;
+            if(i==index){
+                subCurrent= new ListNode<T>(element, subTail, null);
+            }else{
+                subCurrent= new ListNode<T>(current.getData(), subTail, null);
+            }
 
-        return prevObj;
+            if(subTail!=null){
+                subTail.setNext(subCurrent);
+            }
+            if(subHead==null){
+                subHead = subCurrent;
+            }
+            subTail=subCurrent;
+            current = current.getNext();
+        }
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+        prev.push(this);
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+        return new PersistentList<T>(prev, next,subHead, subTail, length);
     }
 
 
@@ -355,26 +348,37 @@ public class PersistentList<T> implements List {
      * @param index     Индекс.
      * @param element   Добавленный элемент.
      */
-    @Override
-    public void add(int index, Object element) {
-        if (index < 0 || index > size())
-            throw new IndexOutOfBoundsException(Exceptions.LIST_INDEX_OUT_OF_BOUNDS);
+    public PersistentList<T>  add(int index, T element) {
+        ListNode<T> current = head;
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        for (int i = 0; i < length; i++) {
+            ListNode<T> subCurrent;
+            if(i==index){
+                subCurrent= new ListNode<T>(element, subTail, null);
+                if(subTail!=null){
+                    subTail.setNext(subCurrent);
+                }
+                if(subHead==null){
+                    subHead = subCurrent;
+                }
+                subTail=subCurrent;
+            }
 
-        currentVersion++;
-        ListNode<T> current = heads.floorEntry(currentVersion).getValue();
-        for (int i = 0; i < index; i++) {
-            current = current.getNext(currentVersion);
+            subCurrent= new ListNode<T>(current.getData(), subTail, null);
+            if(subTail!=null){
+                subTail.setNext(subCurrent);
+            }
+            if(subHead==null){
+                subHead = subCurrent;
+            }
+            subTail=subCurrent;
+            current = current.getNext();
         }
-
-        ListNode<T> prev = current.getPrev(currentVersion);
-        ListNode<T> newEl = new ListNode<T>((T)element, currentVersion, prev, current);
-        if (null != prev) {
-            prev.setNext(currentVersion, newEl);
-        } else {
-            heads.put(currentVersion, newEl);
-        }
-        current.setPrev(currentVersion, newEl);
-        lengths.put(currentVersion, size(currentVersion) + 1);
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+        prev.push(this);
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+        return new PersistentList<T>(prev, next,subHead, subTail, length +1);
     }
 
     /**
@@ -383,59 +387,28 @@ public class PersistentList<T> implements List {
      * @param index     Индекс.
      * @return          Удалённый элемент.
      */
-    @Override
-    public Object remove(int index) {
-        if (index < 0 || index >= size())
-            throw new IndexOutOfBoundsException(Exceptions.LIST_INDEX_OUT_OF_BOUNDS);
-
-        ListNode<T> current = heads.floorEntry(currentVersion).getValue();
-        for (int i = 0; i < index; i++) {
-            current = current.getNext(currentVersion);
-        }
-
-        ListNode<T> prevEl = current.getPrev(currentVersion);
-        ListNode<T> nextEl = current.getNext(currentVersion);
-        currentVersion++;
-        if (prevEl != null) {
-            prevEl.setNext(currentVersion, nextEl);
-        } else {
-            heads.put(currentVersion, nextEl);
-        }
-        if (nextEl != null) {
-            nextEl.setPrev(currentVersion, prevEl);
-        } else {
-            tails.put(currentVersion, prevEl);
-        }
-        lengths.put(currentVersion, size(currentVersion) - 1);
-
-        return current.getValue(currentVersion--);
-    }
-
-    /**
-     * Возвращает номер элемента в листе определённой версии.
-     *
-     * @param o         Элемент.
-     * @param version   Версия.
-     * @return          Номер элемента или -1, если такого элемента не содержиться.
-     */
-    public int indexOf(Object o, int version) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-
-        int result = -1;
-        if (isEmpty(version)) {
-            return result;
-        }
-
-        ListNode<T> current = heads.floorEntry(version).getValue();
-        for (int ind = 0; ind < size(version); ind++) {
-            if (current.getValue(version).equals(o)) {
-                result = ind;
-                break;
+    public PersistentList<T>  remove(int index) {
+        ListNode<T> current = head;
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        for (int i = 0; i < length; i++) {
+            if(i!=index) {
+                ListNode<T> subCurrent;
+                subCurrent = new ListNode<T>(current.getData(), subTail, null);
+                if (subTail != null) {
+                    subTail.setNext(subCurrent);
+                }
+                if (subHead == null) {
+                    subHead = subCurrent;
+                }
+                subTail = subCurrent;
             }
-            current = current.getNext(version);
+            current = current.getNext();
         }
-        return result;
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
+        prev.push(this);
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
+        return new PersistentList<T>(prev, next,subHead, subTail, length -1);
     }
 
     /**
@@ -444,50 +417,27 @@ public class PersistentList<T> implements List {
      * @param o         Элемент.
      * @return          Номер элемента или -1, если такого элемента не содержиться.
      */
-    @Override
     public int indexOf(Object o) {
-        return indexOf(o, currentVersion);
+        if(!contains(o)){
+            return -1;
+        }
+        ListNode<T> node = head;
+        int i = 0;
+        while (!node.getData().equals(o)){
+            i++;
+            node = node.getNext();
+        }
+        return i;
     }
 
-    public Iterator iterator(int version) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-        return new Iterator() {
-            ListIterator listIterator = versionedListIterator(version);
-
-            @Override
-            public boolean hasNext() {
-                return listIterator.hasNext();
-            }
-
-            @Override
-            public Object next() {
-                return listIterator.next();
-            }
-        };
-    }
-
-
-    @Override
-    public Iterator iterator() {
-        return iterator(currentVersion);
-    }
-
-    public ListIterator versionedListIterator(int version, int index) {
-        if (version < 0 || version > currentVersion)
-            throw new NoSuchElementException(Exceptions.NO_SUCH_VERSION);
-        int size = size(version);
-        if (index < 0 || index >= size)
-            throw new IndexOutOfBoundsException(Exceptions.LIST_INDEX_OUT_OF_BOUNDS);
-        System.out.println(heads.get(0)+" "+ version);
+    public Iterator iterator(int index) {
         return new ListIterator() {
-            int currIndex = index - 1;
-            int _version = version;
-            ListNode currElement = heads.floorEntry(currentVersion).getValue();
+            int currIndex = index-1;
+            ListNode currElement = head;
 
             {
                 for (int i = 0; i < index; i++) {
-                    currElement = currElement.getNext(_version);
+                    currElement = head.getNext();
                 }
             }
 
@@ -495,40 +445,40 @@ public class PersistentList<T> implements List {
             @Override
             public boolean hasNext() {
                 if (currIndex < 0) return currElement != null;
-                return currElement.getNext(_version) != null;
+                return currElement.getNext() != null;
             }
 
             @Override
             public Object next() {
                 if (hasNext()) {
                     if (currIndex >= 0)
-                        currElement = currElement.getNext(_version);
+                        currElement = currElement.getNext();
                     currIndex++;
-                    return currElement.getValue(_version);
+                    return currElement.getData();
                 } else
                     throw new NoSuchElementException(Exceptions.NO_SUCH_ELEMENT);
             }
 
             @Override
             public boolean hasPrevious() {
-                if (currIndex >= size) return currElement != null;
-                return currElement.getPrev(_version) != null;
+                if (currIndex >= length) return currElement != null;
+                return currElement.getPrev() != null;
             }
 
             @Override
             public Object previous() {
                 if (hasPrevious()) {
-                    if (currIndex < size)
-                        currElement = currElement.getPrev(_version);
+                    if (currIndex < length)
+                        currElement = currElement.getPrev();
                     currIndex--;
-                    return currElement.getValue(_version);
+                    return currElement.getData();
                 } else
                     throw new NoSuchElementException(Exceptions.NO_SUCH_ELEMENT);
             }
 
             @Override
             public int nextIndex() {
-                return min(currIndex + 1, size);
+                return min(currIndex + 1, length);
             }
 
             @Override
@@ -553,100 +503,60 @@ public class PersistentList<T> implements List {
         };
     }
 
-    /**
-     * Returns a list iterator over the elements in the specified version of this list (in proper sequence).
-     * @return a list iterator over the elements in the specified version of this list (in proper sequence)
-     */
-    public ListIterator versionedListIterator(int version) {
-        return versionedListIterator(version, 0);
+    public Iterator iterator(){
+        return iterator(0);
     }
 
-    /**
-     * Returns a list iterator over the elements in the current version of this list (in proper sequence).
-     * @return a list iterator over the elements in the current version of this list (in proper sequence)
-     */
-    @Override
-    public ListIterator listIterator() {
-        return versionedListIterator(currentVersion, 0);
+    public PersistentList<T> Undo() {
+        if (prev.isEmpty()) {
+            return this;
+        }
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>) this.prev.clone();
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>) this.next.clone();
+        PersistentList<T> currentList = prev.pop();
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        if (!currentList.isEmpty()) {
+            for (int i = 0; i < currentList.size(); i++) {
+                ListNode<T> subCurrent;
+                subCurrent = new ListNode<T>((T)currentList.get(i), subTail, null);
+                if (subTail != null) {
+                    subTail.setNext(subCurrent);
+                }
+                if (subHead == null) {
+                    subHead = subCurrent;
+                }
+                subTail = subCurrent;
+            }
+        }
+        next.push(this);
+        return  new PersistentList<T>(prev,next,subHead, subTail, currentList.size());
     }
 
-    /**
-     * Returns a list iterator over the elements in the current version of this list (in proper sequence), starting at the specified position in the list.
-     * The specified index indicates the first element that would be returned by an initial call to next.
-     * An initial call to previous would return the element with the specified index minus one.
-     * @param index index of the first element to be returned from the list iterator (by a call to next)
-     * @return a list iterator over the elements in this list (in proper sequence), starting at the specified position in the list
-     */
-    @Override
-    public ListIterator listIterator(int index) {
-        return versionedListIterator(currentVersion, index);
+    public PersistentList<T> Redo() {
+        if (next.isEmpty()) {
+            return this;
+        }
+        Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>) this.prev.clone();
+        Stack<PersistentList<T>> next = (Stack<PersistentList<T>>) this.next.clone();
+        PersistentList<T> currentList = next.pop();
+        ListNode<T> subHead = null;
+        ListNode<T> subTail = null;
+        if (!currentList.isEmpty()) {
+            for (int i = 0; i < currentList.size(); i++) {
+                ListNode<T> subCurrent;
+                subCurrent = new ListNode<T>((T)currentList.get(i), subTail, null);
+                if (subTail != null) {
+                    subTail.setNext(subCurrent);
+                }
+                if (subHead == null) {
+                    subHead = subCurrent;
+                }
+                subTail = subCurrent;
+            }
+        }
+        prev.push(this);
+        return  new PersistentList<T>(prev,next,subHead, subTail, currentList.size());
     }
 
-    /**
-     * Возвращает массив на основе версии.
-     *
-     * @param version   Версия.
-     * @return          Массив.
-     */
-    public PersistentMassive<T> getArray(int version){
-        return  null;
-    }
-
-    /**
-     * Возвращает массив на основе последней версии.
-     *
-     * @return          Массив.
-     */
-    public PersistentMassive<T> getArray(){
-        return getArray(currentVersion);
-    }
-
-
-    @Override
-    public List subList(int fromIndex, int toIndex) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Spliterator spliterator() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Object[] toArray() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Object[] toArray(Object[] a) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean retainAll(Collection c) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void replaceAll(UnaryOperator operator) {
-        throw new UnsupportedOperationException();
-    }
-    @Override
-    public void sort(Comparator c) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void clear() {
-        throw new UnsupportedOperationException();
-    }
-
-    public int lastIndexOf(Object o, int version) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int lastIndexOf(Object o) {
-        throw new UnsupportedOperationException();
-    }
 }

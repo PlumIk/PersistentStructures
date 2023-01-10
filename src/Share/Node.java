@@ -1,7 +1,7 @@
 package Share;
 
 public class Node<T> {
-     private T data;
+     protected T data;
     public Node(){}
 
     public Node(T newData){

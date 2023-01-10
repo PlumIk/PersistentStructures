@@ -1,6 +1,8 @@
 import PersistentList.PersistentList;
 import PersistentMassive.PersistentMassive;
 
+import java.util.Iterator;
+
 public class Main {
 
     private static void printMas(PersistentMassive massive){
@@ -10,20 +12,18 @@ public class Main {
         System.out.println();
     }
 
+    private static void printList(PersistentList list){
+        Iterator asd = list.iterator();
+        while (asd.hasNext()){
+            System.out.println("value:"+asd.next());
+        }
+        System.out.println();
+    }
+
     public static void main(String[] args) {
-        PersistentMassive<Integer> a = new PersistentMassive<Integer>();
-        a = a.set(0,1);
-        a=a.add(2);
-        a=a.add(3);
-        printMas(a);
-        var b = a.Undo();
-        printMas(b);
-        b=b.Undo();
-        printMas(b);
-        printMas(b.Undo());
-        printMas(b.Redo());
-        var c = b.add(15);
-        printMas(c);
-        printMas(b.Redo());
+        PersistentList<Integer> a = new PersistentList<Integer>();
+        a = a.add(1);
+        System.out.println(a.get(0));
+        printList(a);
     }
 }

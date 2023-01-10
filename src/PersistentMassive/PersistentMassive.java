@@ -2,18 +2,15 @@ package PersistentMassive;
 
 import PersistentList.ListNode;
 import Share.Node;
-import Utils.Exceptions;
 
 import java.util.ArrayList;
-import java.util.NoSuchElementException;
 import java.util.Stack;
-import java.util.TreeMap;
 
 public class PersistentMassive <T>{
-    private int lengths;
+    private final int length;
 
     /** Данные в зависимости от версии. */
-    private ArrayList<Node<T>> data=new ArrayList<>();;
+    private final ArrayList<Node<T>> data=new ArrayList<>();;
 
     private Stack <PersistentMassive <T>> prev = new Stack<>();
     private Stack <PersistentMassive <T>> next =  new Stack<>();
@@ -23,7 +20,7 @@ public class PersistentMassive <T>{
      */
     public PersistentMassive() {
         data.add(new Node<T>());
-        lengths =1;
+        length =1;
     }
 
     /**
@@ -35,7 +32,17 @@ public class PersistentMassive <T>{
         for (int i = 0; i < capacity; i++) {
             data.add(new Node<T>());
         }
-        lengths = capacity;
+        length = capacity;
+    }
+
+    public PersistentMassive(ListNode<T> node){
+        int length=0;
+        while (node!=null){
+            data.add(node);
+            length++;
+            node=node.getNext();
+        }
+        this.length=length;
     }
 
    private PersistentMassive(Stack <PersistentMassive <T>> prevs, Stack <PersistentMassive <T>> nexts, Node<T> value, int index, int last){
@@ -43,16 +50,16 @@ public class PersistentMassive <T>{
        for (int i = 0; i < last; i++) {
            data.add(new Node<>(prev.get(i)));
        }
-       lengths = last;
 
        if(value!=null) {
-           if (index < prev.lengths) {
+           if (index < prev.length) {
                data.add(index, value);
            } else {
                data.add(value);
-               lengths++;
+               last++;
            }
        }
+       length = last;
        this.prev=prevs;
        this.next=nexts;
    }
@@ -79,7 +86,7 @@ public class PersistentMassive <T>{
         Stack <PersistentMassive <T>> next = (Stack <PersistentMassive <T>>) this.next.clone();
         prev.push(this);
         prev.push(this);
-        return new PersistentMassive<T>(prev,next, new Node<>(value), index, lengths);
+        return new PersistentMassive<T>(prev,next, new Node<>(value), index, length);
     }
 
     /**
@@ -87,7 +94,7 @@ public class PersistentMassive <T>{
      *
      * @return длина массива.
      */
-    public int size() {return lengths;}
+    public int size() {return length;}
 
     /**
      * Добавляет значение в конец массива.
@@ -100,7 +107,7 @@ public class PersistentMassive <T>{
         Stack <PersistentMassive <T>> next = (Stack <PersistentMassive <T>>) this.next.clone();
         prev.push(this);
         prev.push(this);
-        return new PersistentMassive<T>(prev,next,new Node<>(value), lengths,lengths);
+        return new PersistentMassive<T>(prev,next,new Node<>(value), length, length);
     }
 
     /**
@@ -113,7 +120,7 @@ public class PersistentMassive <T>{
         Stack <PersistentMassive <T>> next = (Stack <PersistentMassive <T>>) this.next.clone();
         prev.push(this);
         prev.push(this);
-        return new PersistentMassive<T>(prev,next,null, lengths,lengths-1);
+        return new PersistentMassive<T>(prev,next,null, length, length -1);
     }
 
     public PersistentMassive<T> Undo(){
@@ -123,7 +130,7 @@ public class PersistentMassive <T>{
         Stack <PersistentMassive <T>> prev = (Stack <PersistentMassive <T>>) this.prev.clone();
         Stack <PersistentMassive <T>> next = (Stack <PersistentMassive <T>>) this.next.clone();
         next.push(this);
-        return new PersistentMassive<T>(prev, next, null, prev.lastElement().lengths, prev.lastElement().lengths);
+        return new PersistentMassive<T>(prev, next, null, prev.lastElement().length, prev.lastElement().length);
     }
 
     public  PersistentMassive<T> Redo(){
@@ -133,6 +140,6 @@ public class PersistentMassive <T>{
         Stack <PersistentMassive <T>> prev = (Stack <PersistentMassive <T>>) this.prev.clone();
         Stack <PersistentMassive <T>> next = (Stack <PersistentMassive <T>>) this.next.clone();
         prev.push(next.pop());
-        return new PersistentMassive<T>(prev, next, null,prev.lastElement().lengths, prev.lastElement().lengths);
+        return new PersistentMassive<T>(prev, next, null,prev.lastElement().length, prev.lastElement().length);
     }
 }
