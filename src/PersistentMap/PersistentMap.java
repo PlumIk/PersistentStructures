@@ -178,7 +178,6 @@ public class PersistentMap<K, V> implements Map {
         return new PersistentMap<K, V>(prev, next, newData, currSize);
     }
 
-    // ???
     public PersistentMap<K, V> putAllMap(Map m) {
         TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);;
         int currSize = length;
@@ -253,7 +252,6 @@ public class PersistentMap<K, V> implements Map {
         return defaultValue;
     }
 
-    // ???
     public PersistentMap<K, V> forEachMap(BiConsumer action) {
         TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);;
         for (Map.Entry<K, MapNode<V>> entry : newData.entrySet()) {
