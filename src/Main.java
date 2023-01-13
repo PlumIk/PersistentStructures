@@ -34,15 +34,27 @@ public class Main {
     }
 
     public static void main(String[] args) {
+
         PersistentList<Integer> a = new PersistentList<Integer>();
         a = a.add(1);
+        a = a.add(2);
+        a = a.add(3);
+        a = a.add(3);
         System.out.println(a.get(0));
         printList(a);
+        /*
+        PersistentMassive<Integer> a = new PersistentMassive<Integer>();
+        a=a.add(1);
+        a=a.add(2);
+        var b =a;
+        a=a.add(4);
+        a.Undo();
+
         PersistentMap<String, String> b = new PersistentMap<String, String>();
         b = b.put("sad", "bad");
         PersistentMap<String, String> c = b.put("s", "b");
         System.out.println(b.get("sad"));
         printMap(b);
-        printMap(c);
+        printMap(c);*/
     }
 }

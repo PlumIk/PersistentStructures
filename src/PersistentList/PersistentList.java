@@ -116,6 +116,9 @@ public class PersistentList<T> {
             subTail=subCurrent;
             current = current.getNext();
         }
+        ListNode<T> subCurrent = new ListNode<T>(o, subTail, null);
+        subTail.setNext(subCurrent);
+        subTail=subCurrent;
         Stack<PersistentList<T>> prev = (Stack<PersistentList<T>>)this.prev.clone();
         prev.push(this);
         Stack<PersistentList<T>> next = (Stack<PersistentList<T>>)this.next.clone();
