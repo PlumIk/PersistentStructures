@@ -32,6 +32,6 @@ public class MapNode<T> {
     }
 
     public boolean isRemoved() {
-        return object == null || isRemoved;
+        return isRemoved;
     }
 }

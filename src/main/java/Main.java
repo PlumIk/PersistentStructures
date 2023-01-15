@@ -40,7 +40,6 @@ public class Main {
         a = a.add(2);
         a = a.add(3);
         a = a.add(3);
-        System.out.println(a.get(0));
         printList(a);
         /*
         PersistentMassive<Integer> a = new PersistentMassive<Integer>();
@@ -53,6 +52,7 @@ public class Main {
         PersistentMap<String, String> b = new PersistentMap<String, String>();
         b = b.put("sad", "bad");
         PersistentMap<String, String> c = b.put("s", "b");
+        c = c.put("s", "bc");
         System.out.println(b.get("sad"));
         printMap(b);
         printMap(c);*/
