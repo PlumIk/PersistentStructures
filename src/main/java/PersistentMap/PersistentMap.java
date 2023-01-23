@@ -42,24 +42,32 @@ public class PersistentMap<K, V> {
         }
     }
 
-    private final int length;
+    private int version;
     private Stack<PersistentMap<K, V>> prev = new Stack<PersistentMap<K, V>>();
     private Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
-    private TreeMap<K, MapNode<V>> data;
+    private TreeMap<K,MapNode<V>> data;
+    private TreeMap<Integer, Integer> versionsLengths;
+    private ArrayList<Integer> versions;
 
     /**
      * Конструктор класса. Создаёт пустой словарь.
      */
     public PersistentMap() {
-        length = 0;
+        version = 0;
         data = new TreeMap<>();
+        versions = new ArrayList<Integer>();
+        versions.add(0);
+        this.versionsLengths = new TreeMap<>();
+        versionsLengths.put(0, 0);
     }
 
-    private PersistentMap(Stack<PersistentMap<K, V>> prevs, Stack<PersistentMap<K, V>> nexts, TreeMap<K, MapNode<V>> data, int size) {
+    private PersistentMap(Stack<PersistentMap<K, V>> prevs, Stack<PersistentMap<K, V>> nexts, TreeMap<K, MapNode<V>> data, int version, TreeMap<Integer, Integer> versionsLengths, ArrayList<Integer> versions) {
+        this.versionsLengths = versionsLengths;
         this.data = data;
-        length = size;
         this.prev = prevs;
         this.next = nexts;
+        this.version = version;
+        this.versions = versions;
     }
 
     /**
@@ -68,7 +76,7 @@ public class PersistentMap<K, V> {
      * @return Длина словаря.
      */
     public int size() {
-        return length;
+        return versionsLengths.floorEntry(version).getValue();
     }
 
     /**
@@ -77,7 +85,7 @@ public class PersistentMap<K, V> {
      * @return Пустой ли словарь.
      */
     public boolean isEmpty() {
-        return length == 0;
+        return size() == 0;
     }
 
 
@@ -90,7 +98,7 @@ public class PersistentMap<K, V> {
     public boolean containsKey(Object key) {
         if (data.containsKey(key)) {
             MapNode node = data.get(key);
-            if (!node.isRemoved()) {
+            if (!node.isRemoved(version)) {
                 return true;
             }
         }
@@ -105,12 +113,12 @@ public class PersistentMap<K, V> {
      */
     public boolean containsValue(Object value) {
         for (MapNode<V> node : data.values()) {
-            if (!node.isRemoved()) {
+            if (!node.isRemoved(version)) {
                 if (null == value) {
-                    if (node.getObject() == null)
+                    if (node.getObject(version) == null)
                         return true;
                 } else {
-                    if (value.equals(node.getObject()))
+                    if (value.equals(node.getObject(version)))
                         return true;
                 }
             }
@@ -128,8 +136,14 @@ public class PersistentMap<K, V> {
         if (!data.containsKey(key))
             return null;
         MapNode node = data.get(key);
-        if (!node.isRemoved()) {
-            return node.getObject();
+        for (int i = versions.size()-1; i >= 0; i--) {
+            Integer v = versions.get(i);
+            if (node.isVersion(v))  {
+                if (!node.isRemoved(v))  {
+                    return node.getObject(v);
+                }
+                return null;
+            }
         }
         return null;
     }
@@ -142,22 +156,26 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> put(Object key, Object value) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        MapNode node = newData.get(key);
-        int currSize = length;
-        if (null == node) {
-            newData.put((K) key, new MapNode<V>((V) value));
-            currSize = currSize + 1;
-        } else {
-            if (node.isRemoved()) {
-                currSize = currSize + 1;
-            }
-            node.setObject(value);
-        }
         Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, currSize);
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();;
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        if (null == node) {
+            data.put((K) key, new MapNode<V>((V) value, newVersion));
+            versionsLengths.put(newVersion, currSize + 1);
+        } else {;
+            node.setObject(newVersion, value);
+            if (currSize == 0) {
+                currSize++;
+            }
+            versionsLengths.put(newVersion, currSize);
+        }
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -167,18 +185,21 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> remove(Object key) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
-        int currSize = length;
-        if (null != node) {
-            node.removeObject();
-            currSize = currSize - 1;
-        }
         Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, currSize);
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();;
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        if (null != node) {
+            node.removeObject(newVersion);
+            int currSize = versionsLengths.floorEntry(newVersion).getValue();
+            versionsLengths.put(newVersion, currSize - 1);
+            ArrayList<Integer> newVersions = new ArrayList<>(versions);
+            newVersions.add(newVersion);
+            return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
+        }
+        return this;
     }
 
     /**
@@ -188,25 +209,28 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> putAll(Map m) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        int currSize = length;
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();;
+        int newVersion = versionsLengths.lastKey();
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        newVersion++;
         for (Object entry : m.entrySet()) {
             K key = ((Map.Entry<K, V>) entry).getKey();
             V value = ((Map.Entry<K, V>) entry).getValue();
 
-            MapNode node = newData.get(key);
+            MapNode node = data.get(key);
             if (null == node) {
-                newData.put(key, new MapNode<V>(value));
-                currSize = currSize + 1;
+                data.put(key, new MapNode<V>(value, newVersion));
+                currSize++;
             } else {
-                node.setObject(value);
+                node.setObject(newVersion, value);
             }
         }
-        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, currSize);
+        versionsLengths.put(newVersion, currSize);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -219,7 +243,7 @@ public class PersistentMap<K, V> {
         Set<K> resultKeys = new HashSet<>(data.keySet());
 
         for (K key : keys) {
-            if (data.get(key).isRemoved()) {
+            if (this.get(key) == null) {
                 resultKeys.remove(key);
             }
         }
@@ -234,8 +258,8 @@ public class PersistentMap<K, V> {
     public Collection values() {
         LinkedList<V> result = new LinkedList<V>();
         for (Map.Entry<K, MapNode<V>> entry : data.entrySet()) {
-            if (!entry.getValue().isRemoved()) {
-                result.add(entry.getValue().getObject());
+            if (!entry.getValue().isRemoved(version)) {
+                result.add(entry.getValue().getObject(version));
             }
         }
         return result;
@@ -250,8 +274,8 @@ public class PersistentMap<K, V> {
         Set<Map.Entry> result = new HashSet<>();
 
         for (Map.Entry<K, MapNode<V>> entry : data.entrySet()) {
-            if (!entry.getValue().isRemoved()) {
-                result.add(new PersistentMapEntry<>(entry.getKey(), entry.getValue().getObject()));
+            if (!entry.getValue().isRemoved(version)) {
+                result.add(new PersistentMapEntry<>(entry.getKey(), entry.getValue().getObject(version)));
             }
         }
         return result;
@@ -265,9 +289,8 @@ public class PersistentMap<K, V> {
      * @return Значение.
      */
     public Object getOrDefault(Object key, Object defaultValue) {
-
-        if (data.get(key) != null && !data.get(key).isRemoved()) {
-            return data.get(key).getObject();
+        if (data.get(key) != null && !data.get(key).isRemoved(version)) {
+            return data.get(key).getObject(version);
         }
         return defaultValue;
     }
@@ -279,17 +302,21 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> forEach(BiConsumer action) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        for (Map.Entry<K, MapNode<V>> entry : newData.entrySet()) {
-            if (!entry.getValue().isRemoved()) {
-                action.accept(entry.getKey(), entry.getValue().getObject());
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        int newVersion = versionsLengths.lastKey();
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        newVersion++;
+        for (Map.Entry<K, MapNode<V>> entry : data.entrySet()) {
+            if (!entry.getValue().isRemoved(version)) {
+                action.accept(entry.getKey(), entry.getValue().getObject(version));
             }
         }
-        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, length);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        versionsLengths.put(newVersion, currSize);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -299,17 +326,21 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> replaceAll(BiFunction function) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        for (Map.Entry<K, MapNode<V>> entry : newData.entrySet()) {
-            if (!entry.getValue().isRemoved()) {
-                entry.getValue().setObject((V) function.apply(entry.getKey(), entry.getValue().getObject()));
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        int newVersion = versionsLengths.lastKey();
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        newVersion++;
+        for (Map.Entry<K, MapNode<V>> entry : data.entrySet()) {
+            if (!entry.getValue().isRemoved(version)) {
+                entry.getValue().setObject(newVersion, (V)function.apply(entry.getKey(), entry.getValue().getObject(version)));
             }
         }
-        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, length);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        versionsLengths.put(newVersion, currSize);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -320,24 +351,32 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> putIfAbsent(Object key, Object value) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
         Object oldValue = null;
-        MapNode node = newData.get(key);
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        newVersion++;
         if (null == node) {
-            newData.put((K) key, new MapNode<V>((V) value));
+            data.put((K)key, new MapNode<V>((V)value, newVersion));
+            currSize++;
         } else {
-            oldValue = node.getObject();
+            oldValue = node.getObject(version);
             if (null == oldValue) {
-                node.setObject(value);
+                if (node.isRemoved(version)) {
+                    currSize++;
+                }
+                node.setObject(newVersion, value);
             } else {
                 return this;
             }
         }
-        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, length + 1);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        versionsLengths.put(newVersion, currSize);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -348,17 +387,19 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> remove(Object key, Object value) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        MapNode node = data.get(key);
         int curSize = size();
-
-        if (null != node && node.getObject().equals(value) && !node.isRemoved()) {
-            node.removeObject();
-            Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-            prev.push(this);
-            Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-            return new PersistentMap<K, V>(prev, next, newData, curSize - 1);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        if (null != node && node.getObject(version).equals(value) && !node.isRemoved(version)) {
+            node.removeObject(newVersion);
+            versionsLengths.put(newVersion, curSize - 1);
+            ArrayList<Integer> newVersions = new ArrayList<>(versions);
+            newVersions.add(newVersion);
+            return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
         }
         return this;
     }
@@ -372,17 +413,20 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> replace(Object key, Object oldValue, Object newValue) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
-
-        if (null != node && null != node.getObject() &&
-                !node.isRemoved() && node.getObject().equals(oldValue)) {
-            node.setObject(newValue);
-            Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-            prev.push(this);
-            Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-            return new PersistentMap<K, V>(prev, next, newData, length);
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        newVersion++;
+        if (null != node && null != node.getObject(version) &&
+                !node.isRemoved(version) && node.getObject(version).equals(oldValue)) {
+            node.setObject(newVersion, newValue);
+            ArrayList<Integer> newVersions = new ArrayList<>(versions);
+            newVersions.add(newVersion);
+            versionsLengths.put(newVersion, currSize);
+            return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
         }
         return this;
     }
@@ -395,16 +439,19 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> replace(Object key, Object value) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
-
-        if (null != node && !node.isRemoved()) {
-            node.setObject(value);
-            Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-            prev.push(this);
-            Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-            return new PersistentMap<K, V>(prev, next, newData, length);
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths,versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        newVersion++;
+        if (null != node && !node.isRemoved(version)) {
+            node.setObject(newVersion, value);
+            ArrayList<Integer> newVersions = new ArrayList<>(versions);
+            newVersions.add(newVersion);
+            versionsLengths.put(newVersion, currSize);
+            return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
         }
         return this;
     }
@@ -417,27 +464,32 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> computeIfAbsent(Object key, Function mappingFunction) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
-        int curSize = size();
-
-        if (null != node && !node.isRemoved() && node.getObject() != null) {
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        if (null != node && !node.isRemoved(version) && node.getObject(version) != null) {
             return this;
         }
 
         Object value = mappingFunction.apply(key);
         if (null != value) {
-            if (null == node || node.isRemoved()) {
-                newData.put((K) key, new MapNode<V>((V) value));
-                curSize = curSize + 1;
+            if (null == node) {
+                data.put((K)key, new MapNode<V>((V)value, newVersion));
+                currSize++;
             } else {
-                node.setObject(value);
+                if (node.isRemoved(version)) {
+                    currSize++;
+                }
+                node.setObject(newVersion, value);
             }
-            Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-            prev.push(this);
-            Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-            return new PersistentMap<K, V>(prev, next, newData, curSize);
+            ArrayList<Integer> newVersions = new ArrayList<>(versions);
+            newVersions.add(newVersion);
+            versionsLengths.put(newVersion, currSize);
+            return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
         }
 
         return this;
@@ -451,28 +503,29 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> computeIfPresent(Object key, BiFunction remappingFunction) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
-        int curSize = size();
-
-        if (null == node || node.isRemoved() || node.getObject() == null) {
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        if (null == node || node.isRemoved(version) || node.getObject(version) == null) {
             return this;
         }
 
-        Object oldValue = node.getObject();
+        Object oldValue = node.getObject(version);
         Object value = remappingFunction.apply(key, oldValue);
         if (null != value) {
-            node.setObject(value);
+            node.setObject(newVersion, value);
         } else {
-            node.removeObject();
-            curSize = curSize - 1;
+            node.removeObject(newVersion);
+            currSize--;
         }
-
-        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, curSize);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        versionsLengths.put(newVersion, currSize);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -483,30 +536,32 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> compute(Object key, BiFunction remappingFunction) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
-        int curSize = size();
-
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
         Object oldValue = null;
-        if (null != node && !node.isRemoved()) {
-            oldValue = node.getObject();
+        if (null != node && !node.isRemoved(version)) {
+            oldValue = node.getObject(version);
         }
 
         Object value = remappingFunction.apply(key, oldValue);
         if (null != value) {
-            node.setObject(value);
+            node.setObject(newVersion, value);
         } else {
             if (null != oldValue) {
-                node.removeObject();
-                curSize = curSize - 1;
+                node.removeObject(newVersion);
+                currSize--;
             }
         }
 
-        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, curSize);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        versionsLengths.put(newVersion, currSize);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -518,33 +573,35 @@ public class PersistentMap<K, V> {
      * @return Новый словарь.
      */
     public PersistentMap<K, V> merge(Object key, Object value, BiFunction remappingFunction) {
-        TreeMap<K, MapNode<V>> newData = new TreeMap<>(data);
-        ;
-        MapNode node = newData.get(key);
-        int curSize = size();
-
-        if (null == node || node.isRemoved() || node.getObject() == null) {
-            node.setObject(value);
-            Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-            prev.push(this);
-            Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-            return new PersistentMap<K, V>(prev, next, newData, curSize);
+        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
+        prev.push(new PersistentMap<K, V>(prev, next, data, version, versionsLengths, versions));
+        Stack<PersistentMap<K, V>> next = new Stack<PersistentMap<K, V>>();
+        MapNode node = data.get(key);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        int currSize = versionsLengths.floorEntry(newVersion).getValue();
+        if (null == node || node.isRemoved(version) || node.getObject(version) == null) {
+            node.setObject(newVersion, value);
+            ArrayList<Integer> newVersions = new ArrayList<>(versions);
+            newVersions.add(newVersion);
+            versionsLengths.put(newVersion, currSize);
+            return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
         }
 
-        Object oldValue = node.getObject();
+        Object oldValue = node.getObject(version);
         Object newValue = remappingFunction.apply(key, oldValue);
 
         if (null != newValue) {
-            node.setObject(newValue);
+            node.setObject(newVersion, newValue);
         } else {
-            node.removeObject();
-            curSize = curSize - 1;
+            node.removeObject(newVersion);
+            currSize--;
         }
 
-        Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
-        prev.push(this);
-        Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
-        return new PersistentMap<K, V>(prev, next, newData, curSize);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        versionsLengths.put(newVersion, currSize);
+        return new PersistentMap<K, V>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     public PersistentMap<K, V> Undo() {
@@ -555,7 +612,7 @@ public class PersistentMap<K, V> {
         Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
         Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
         next.push(this);
-        return new PersistentMap<K, V>(prev, next, currentMap.data, currentMap.length);
+        return new PersistentMap<K, V>(prev, next, currentMap.data, currentMap.version, currentMap.versionsLengths, currentMap.versions);
     }
 
     public PersistentMap<K, V> Redo() {
@@ -566,6 +623,6 @@ public class PersistentMap<K, V> {
         Stack<PersistentMap<K, V>> prev = (Stack<PersistentMap<K, V>>) this.prev.clone();
         Stack<PersistentMap<K, V>> next = (Stack<PersistentMap<K, V>>) this.next.clone();
         prev.push(this);
-        return new PersistentMap<K, V>(prev, next, currentMap.data, currentMap.length);
+        return new PersistentMap<K, V>(prev, next, currentMap.data, currentMap.version, currentMap.versionsLengths, currentMap.versions);
     }
 }

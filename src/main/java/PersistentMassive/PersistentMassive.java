@@ -1,20 +1,23 @@
 package PersistentMassive;
 
 import PersistentList.ListNode;
+import PersistentMap.MapNode;
+import PersistentMap.PersistentMap;
 import Share.Node;
 
 import java.util.ArrayList;
 import java.util.Stack;
+import java.util.TreeMap;
 
 public class PersistentMassive<T> {
-    private final int length;
 
     /**
      * Данные в зависимости от версии.
      */
-    private final ArrayList<Node<T>> data = new ArrayList<>();
-    ;
-
+    private ArrayList<Node<T>> data = new ArrayList<>();
+    private int version = 0;
+    private TreeMap<Integer, Integer> versionsLengths;
+    private ArrayList<Integer> versions;
     private Stack<PersistentMassive<T>> prev = new Stack<>();
     private Stack<PersistentMassive<T>> next = new Stack<>();
 
@@ -22,8 +25,12 @@ public class PersistentMassive<T> {
      * Конструктор класса. Создаёт массив с одним элементом null.
      */
     public PersistentMassive() {
-        data.add(new Node<T>());
-        length = 1;
+        data.add(new Node<>());
+        data.get(0).setObject(version, null);
+        versionsLengths = new TreeMap<>();
+        versionsLengths.put(version, 1);
+        versions = new ArrayList<Integer>();
+        versions.add(version);
     }
 
     /**
@@ -33,22 +40,16 @@ public class PersistentMassive<T> {
      */
     public PersistentMassive(int capacity) {
         for (int i = 0; i < capacity; i++) {
-            data.add(new Node<T>());
+            data.add(new Node<>());
+            data.get(i).setObject(version, null);
         }
-        length = capacity;
+        versionsLengths = new TreeMap<>();
+        versionsLengths.put(version, capacity);
+        versions = new ArrayList<Integer>();
+        versions.add(version);
     }
 
-    public PersistentMassive(ListNode<T> node) {
-        int length = 0;
-        while (node != null) {
-            data.add(node);
-            length++;
-            node = node.getNext();
-        }
-        this.length = length;
-    }
-
-    private PersistentMassive(Stack<PersistentMassive<T>> prevs, Stack<PersistentMassive<T>> nexts, Node<T> value, int index, int last) {
+    /*private PersistentMassive(Stack<PersistentMassive<T>> prevs, Stack<PersistentMassive<T>> nexts, Node<T> value, int index, int last) {
         PersistentMassive<T> prev = prevs.pop();
         for (int i = 0; i < last; i++) {
             data.add(new Node<>(prev.get(i)));
@@ -62,9 +63,17 @@ public class PersistentMassive<T> {
                 last++;
             }
         }
-        length = last;
         this.prev = prevs;
         this.next = nexts;
+    }*/
+
+    private PersistentMassive(Stack<PersistentMassive<T>> prevs, Stack<PersistentMassive<T>> nexts, ArrayList<Node<T>> data, int version, TreeMap<Integer, Integer> versionsLengths, ArrayList<Integer> versions) {
+        this.versionsLengths = versionsLengths;
+        this.data = data;
+        this.prev = prevs;
+        this.next = nexts;
+        this.version = version;
+        this.versions = versions;
     }
 
     /**
@@ -74,7 +83,14 @@ public class PersistentMassive<T> {
      * @return Значение.
      */
     public T get(int index) {
-        return data.get(index).getData();
+        Node<T> node = data.get(index);
+        for (int i = versions.size()-1; i >= 0; i--) {
+            Integer v = versions.get(i);
+            if (!node.isRemoved(v) && node.isVersion(v))  {
+                return node.getData(version);
+            }
+        }
+        return this.get(index+1);
     }
 
     /**
@@ -88,8 +104,13 @@ public class PersistentMassive<T> {
         Stack<PersistentMassive<T>> prev = (Stack<PersistentMassive<T>>) this.prev.clone();
         Stack<PersistentMassive<T>> next = (Stack<PersistentMassive<T>>) this.next.clone();
         prev.push(this);
-        prev.push(this);
-        return new PersistentMassive<T>(prev, next, new Node<>(value), index, length);
+        //prev.push(this);
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        data.get(index).setObject(newVersion, value);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        return new PersistentMassive<T>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -98,7 +119,7 @@ public class PersistentMassive<T> {
      * @return длина массива.
      */
     public int size() {
-        return length;
+        return versionsLengths.floorEntry(version).getValue();
     }
 
     /**
@@ -111,8 +132,19 @@ public class PersistentMassive<T> {
         Stack<PersistentMassive<T>> prev = (Stack<PersistentMassive<T>>) this.prev.clone();
         Stack<PersistentMassive<T>> next = (Stack<PersistentMassive<T>>) this.next.clone();
         prev.push(this);
-        prev.push(this);
-        return new PersistentMassive<T>(prev, next, new Node<>(value), length, length);
+        //prev.push(this);
+
+        int curLen = size();
+        if (curLen >= data.size()) {
+            data.add(new Node<>());
+        }
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        data.get(curLen).setObject(newVersion, value);
+        versionsLengths.put(newVersion, curLen + 1);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        return new PersistentMassive<T>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     /**
@@ -124,27 +156,37 @@ public class PersistentMassive<T> {
         Stack<PersistentMassive<T>> prev = (Stack<PersistentMassive<T>>) this.prev.clone();
         Stack<PersistentMassive<T>> next = (Stack<PersistentMassive<T>>) this.next.clone();
         prev.push(this);
-        prev.push(this);
-        return new PersistentMassive<T>(prev, next, null, length, length - 1);
+        //prev.push(this);
+        int curLen = size();
+        int newVersion = versionsLengths.lastKey();
+        newVersion++;
+        versionsLengths.put(newVersion, curLen - 1);
+        ArrayList<Integer> newVersions = new ArrayList<>(versions);
+        newVersions.add(newVersion);
+        return new PersistentMassive<T>(prev, next, data, newVersion, versionsLengths, newVersions);
     }
 
     public PersistentMassive<T> Undo() {
         if (prev.isEmpty()) {
             return this;
         }
+
+        PersistentMassive<T> currentMas = prev.pop();
         Stack<PersistentMassive<T>> prev = (Stack<PersistentMassive<T>>) this.prev.clone();
         Stack<PersistentMassive<T>> next = (Stack<PersistentMassive<T>>) this.next.clone();
         next.push(this);
-        return new PersistentMassive<T>(prev, next, null, prev.lastElement().length, prev.lastElement().length);
+        return new PersistentMassive<T>(prev, next, currentMas.data, currentMas.version, currentMas.versionsLengths, currentMas.versions);
     }
 
     public PersistentMassive<T> Redo() {
         if (next.isEmpty()) {
             return this;
         }
+
+        PersistentMassive<T> currentMas = next.pop();
         Stack<PersistentMassive<T>> prev = (Stack<PersistentMassive<T>>) this.prev.clone();
         Stack<PersistentMassive<T>> next = (Stack<PersistentMassive<T>>) this.next.clone();
-        prev.push(next.pop());
-        return new PersistentMassive<T>(prev, next, null, prev.lastElement().length, prev.lastElement().length);
+        prev.push(this);
+        return new PersistentMassive<T>(prev, next, currentMas.data, currentMas.version, currentMas.versionsLengths, currentMas.versions);
     }
 }
